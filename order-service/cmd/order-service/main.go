@@ -3,14 +3,18 @@ package main
 import (
 	"database/sql"
 	"log"
-	"net/http"
-	"order-service/internal/repository"
-	httpdelivery "order-service/internal/transport/http"
-	"order-service/internal/usecase"
-	"time"
+	"net"
 
 	"github.com/gin-gonic/gin"
+	orderpb "github.com/guulzadaa/AP2_generated/orderpb"
 	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"order-service/internal/repository"
+	grpcTransport "order-service/internal/transport/grpc"
+	httpdelivery "order-service/internal/transport/http"
+	"order-service/internal/usecase"
 )
 
 func initDB() *sql.DB {
@@ -32,14 +36,36 @@ func main() {
 	db := initDB()
 	defer db.Close()
 
-	httpClient := &http.Client{
-		Timeout: 2 * time.Second,
+	conn, err := grpc.Dial(
+		"localhost:50051",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Fatal("failed to connect to payment gRPC service:", err)
 	}
+	defer conn.Close()
 
 	orderRepo := repository.NewOrderRepository(db)
-	paymentClient := repository.NewPaymentHTTPClient("http://localhost:8081", httpClient)
+	paymentClient := repository.NewPaymentGRPCClient(conn)
 	orderUC := usecase.NewOrderUseCase(orderRepo, paymentClient)
-	orderHandler := httpdelivery.NewOrderHandler(orderUC)
+
+	streamServer := grpcTransport.NewOrderStreamServer(orderUC)
+	orderHandler := httpdelivery.NewOrderHandler(orderUC, streamServer)
+
+	lis, err := net.Listen("tcp", ":50052")
+	if err != nil {
+		log.Fatal("failed to listen for order gRPC service:", err)
+	}
+
+	grpcServer := grpc.NewServer()
+	orderpb.RegisterOrderServiceServer(grpcServer, streamServer)
+
+	go func() {
+		log.Println("Order gRPC Streaming Service running on :50052")
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatal("failed to serve order gRPC:", err)
+		}
+	}()
 
 	router := gin.Default()
 
@@ -47,7 +73,7 @@ func main() {
 	router.GET("/orders/:id", orderHandler.GetOrder)
 	router.PATCH("/orders/:id/cancel", orderHandler.CancelOrder)
 
-	log.Println("Order Service running on :8080")
+	log.Println("Order REST Service running on :8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}

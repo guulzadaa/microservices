@@ -1,140 +1,120 @@
-# AP2 Assignment 1 – Clean Architecture based Microservices (Order & Payment)
+## Assignment 2 – gRPC migration & contract-first development
 
-## Overview
+Name: Gulzada Issa  
+Course: Advanced Programming 2  
+Assignment: Assignment 2 – gRPC migration & contract-first development
 
-This project implements a small two-service platform in Go using Clean Architecture and REST communication.
+## Project overview
 
-The system consists of:
-- Order Service
-- Payment Service
+This project is a migration of Assignment 1 from REST-based inter-service communication to gRPC-based communication.
 
-Each service is implemented as an independent microservice with its own database, internal models, repository layer, use case layer, and HTTP transport layer.
+The system contains two microservices:
 
-The project demonstrates:
-- separation of concerns
-- dependency inversion
-- bounded contexts
-- database per service
-- synchronous REST communication with timeout handling
+**Order service**   
+**Payment service**
 
-## Services
+The external API for end users is still REST and is exposed by the Order Service.  
+However, the internal communication between Order Service and Payment Service was migrated from REST to gRPC.
 
-### 1. Order Service
-The Order Service manages customer orders and their states.
+In addition, the Order Service provides a **server-side streaming gRPC endpoint** for order tracking. A separate client can subscribe to order updates and receive status changes in real time.
 
-Supported endpoints:
-- `POST /orders`
-- `GET /orders/{id}`
-- `PATCH /orders/{id}/cancel`
+## Main goal of the migration
 
-Main responsibilities:
-- create a new order with status `Pending`
-- call Payment Service to authorize payment
-- update order status to `Paid` or `Failed`
-- return order details
-- allow cancellation only for `Pending` orders
+In Assignment 1, the Order Service called the Payment Service using REST.  
+In Assignment 2, this internal call was replaced with gRPC in order to introduce stronger contracts, typed messages, and a contract-first workflow using Protocol Buffers.
 
-### 2. Payment Service
-The Payment Service processes payments and stores transaction information.
+The business logic and domain structure from Assignment 1 were preserved.  
+Only the communication and delivery layers were updated to support gRPC.
 
-Supported endpoints:
-- `POST /payments`
-- `GET /payments/{order_id}`
+## Contract-first workflow
 
-Main responsibilities:
-- receive payment request from Order Service
-- authorize or decline payment
-- store payment result in its own database
-- return payment information
+This project follows a contract-first approach.
+
+Proto Repository:    
+The `.proto` files are stored in a separate repository:
+
+**AP2_protos**  
+`https://github.com/guulzadaa/AP2_protos`
+
+Generated Code Repository:   
+The generated protobuf and gRPC files are stored in another separate repository:
+
+**AP2_generated**  
+`https://github.com/guulzadaa/AP2_generated`
+
+The services import the generated Go code from the generated repository instead of keeping shared contract files inside the service source code.
+
+This approach makes the service contract explicit and reusable.
 
 ## Architecture
 
-Each service follows Clean Architecture principles.
+The system follows Clean Architecture principles inside each service.
 
-### Layers
-- domain: contains core business entities
-- usecase: contains business logic and application rules
-- repository: contains persistence logic and outbound infrastructure logic
-- transport/http: contains thin HTTP handlers
-- cmd: composition root where dependencies are wired manually
+### Order service
+The Order Service is responsible for:
+- creating orders
+- storing order data
+- returning order details
+- cancelling pending orders
+- subscribing clients to order status updates
 
-### Why this structure?
-This design keeps HTTP, database code, and business logic separated.  
-Handlers remain thin, business rules stay in use cases, and repositories handle database access.
+### Payment service
+The Payment Service is responsible for:
+- processing payment requests
+- validating the payment amount
+- storing payment records
+- returning payment status
 
-## Bounded Contexts
+### Communication model
+- User -> Order Service = REST
+- Order Service -> Payment Service = gRPC
+- Streaming Client -> Order Service = gRPC server-side streaming
 
-The system is divided into two bounded contexts:
+### Database ownership
+Each service has its own database:
+- Order Service -> `order_db`
+- Payment Service -> `payment_db`
 
-- Order Context – owns order data and order lifecycle
-- Payment Context – owns payment authorization and transaction storage
+This design avoids shared storage and keeps the bounded contexts independent.
 
-There is:
-- no shared database
-- no shared entity/model package
-- no direct SQL access from Order Service to Payment data
+## Architecture diagram
+![Diagram](docs/ArchitectureDiagramAssignment2.png)
 
-This makes service boundaries clear and reduces coupling.
-
-## Databases
-
-Each service has its own PostgreSQL database:
-
-- order_db
-- payment_db
-
-This follows the database-per-service rule and ensures separate data ownership.
-
-## Business Rules
-
-The system implements the following rules:
-
-1. Money is stored as int64
-2. Order amount must be greater than 0
-3. Only `Pending` orders can be cancelled
-4. `Paid` orders cannot be cancelled
-5. If payment amount is greater than 100000, the payment is declined
-6. Order Service communicates with Payment Service using REST only
-7. Order Service uses a custom `http.Client` with a timeout of 2 seconds
-
-## Failure Handling
-
-If Payment Service is unavailable:
-- Order Service does not wait indefinitely
-- the HTTP client timeout is triggered
-- Order Service returns `503 Service Unavailable`
-- the order is marked as `Failed`
-
-I chose to mark the order as `Failed` in this scenario because it avoids leaving the order in an uncertain intermediate state and makes the behavior deterministic and easier to explain.
-
-## REST Communication
-
-Order Service calls Payment Service through:
-
-- `POST /payments`
-
-This is synchronous communication over HTTP using a custom client with timeout protection.
-
-## Project Structure
-
-### order-service
-```text
+## Project structure
+**Order service**
+```
 order-service/
-├── cmd/order-service/main.go
-├── internal/domain/
-├── internal/usecase/
-├── internal/repository/
-├── internal/transport/http/
-└── migrations/
+├── cmd/
+│   ├── order-service/
+│   │   └── main.go
+│   └── stream-client/
+│       └── main.go
+├── internal/
+│   ├── domain/
+│   ├── repository/
+│   ├── transport/
+│   │   ├── http/
+│   │   └── grpc/
+│   └── usecase/
+├── migrations/
+└── go.mod
 ```
 
-### payment-service
-```text
-payment-service/
-├── cmd/payment-service/main.go
-├── internal/domain/
-├── internal/usecase/
-├── internal/repository/
-├── internal/transport/http/
-└── migrations/
+**Payment service**
 ```
+payment-service/
+├── cmd/
+│   └── payment-service/
+│       └── main.go
+├── internal/
+│   ├── domain/
+│   ├── repository/
+│   ├── transport/
+│   │   ├── http/
+│   │   └── grpc/
+│   └── usecase/
+├── migrations/
+└── go.mod
+```
+
+

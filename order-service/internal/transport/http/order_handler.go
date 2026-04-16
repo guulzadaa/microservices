@@ -5,15 +5,21 @@ import (
 	nethttp "net/http"
 	"order-service/internal/usecase"
 
+	grpcTransport "order-service/internal/transport/grpc"
+
 	"github.com/gin-gonic/gin"
 )
 
 type OrderHandler struct {
-	uc *usecase.OrderUseCase
+	uc           *usecase.OrderUseCase
+	streamServer *grpcTransport.OrderStreamServer
 }
 
-func NewOrderHandler(uc *usecase.OrderUseCase) *OrderHandler {
-	return &OrderHandler{uc: uc}
+func NewOrderHandler(uc *usecase.OrderUseCase, streamServer *grpcTransport.OrderStreamServer) *OrderHandler {
+	return &OrderHandler{
+		uc:           uc,
+		streamServer: streamServer,
+	}
 }
 
 type createOrderRequest struct {
@@ -35,6 +41,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		c.JSON(nethttp.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+
+	h.streamServer.Notify(order.ID, order.Status)
 
 	c.JSON(nethttp.StatusCreated, gin.H{
 		"id":          order.ID,
@@ -77,6 +85,8 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	h.streamServer.Notify(id, "Cancelled")
 
 	c.JSON(nethttp.StatusOK, gin.H{"message": "order cancelled"})
 }

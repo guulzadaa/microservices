@@ -1,66 +1,34 @@
 package repository
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
-	"net/http"
+	"context"
+	"time"
+
+	paymentpb "github.com/guulzadaa/AP2_generated/paymentpb"
+	"google.golang.org/grpc"
 )
 
-type PaymentHTTPClient struct {
-	baseURL string
-	client  *http.Client
+type PaymentGRPCClient struct {
+	client paymentpb.PaymentServiceClient
 }
 
-func NewPaymentHTTPClient(baseURL string, client *http.Client) *PaymentHTTPClient {
-	return &PaymentHTTPClient{
-		baseURL: baseURL,
-		client:  client,
+func NewPaymentGRPCClient(conn *grpc.ClientConn) *PaymentGRPCClient {
+	return &PaymentGRPCClient{
+		client: paymentpb.NewPaymentServiceClient(conn),
 	}
 }
 
-type createPaymentRequest struct {
-	OrderID string `json:"order_id"`
-	Amount  int64  `json:"amount"`
-}
+func (p *PaymentGRPCClient) CreatePayment(orderID string, amount int64) (string, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-type createPaymentResponse struct {
-	ID            string `json:"id"`
-	OrderID       string `json:"order_id"`
-	TransactionID string `json:"transaction_id"`
-	Amount        int64  `json:"amount"`
-	Status        string `json:"status"`
-}
-
-func (p *PaymentHTTPClient) CreatePayment(orderID string, amount int64) (string, string, error) {
-	reqBody := createPaymentRequest{
-		OrderID: orderID,
+	resp, err := p.client.ProcessPayment(ctx, &paymentpb.PaymentRequest{
+		OrderId: orderID,
 		Amount:  amount,
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
+	})
 	if err != nil {
 		return "", "", err
 	}
 
-	resp, err := p.client.Post(
-		p.baseURL+"/payments",
-		"application/json",
-		bytes.NewBuffer(jsonBody),
-	)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return "", "", errors.New("payment service returned unexpected status")
-	}
-
-	var result createPaymentResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", "", err
-	}
-
-	return result.TransactionID, result.Status, nil
+	return resp.TransactionId, resp.Status, nil
 }
