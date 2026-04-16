@@ -3,12 +3,17 @@ package main
 import (
 	"database/sql"
 	"log"
+	"net"
+
 	"payment-service/internal/repository"
+	grpcTransport "payment-service/internal/transport/grpc"
 	httpdelivery "payment-service/internal/transport/http"
 	"payment-service/internal/usecase"
 
 	"github.com/gin-gonic/gin"
+	paymentpb "github.com/guulzadaa/AP2_generated/paymentpb"
 	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
 )
 
 func initDB() *sql.DB {
@@ -33,13 +38,28 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(db)
 	paymentUC := usecase.NewPaymentUseCase(paymentRepo)
 	paymentHandler := httpdelivery.NewPaymentHandler(paymentUC)
+	paymentServer := grpcTransport.NewPaymentServer(paymentUC)
+
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		log.Fatal("failed to listen for gRPC:", err)
+	}
+
+	grpcServer := grpc.NewServer()
+	paymentpb.RegisterPaymentServiceServer(grpcServer, paymentServer)
+
+	go func() {
+		log.Println("Payment gRPC Service running on :50051")
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatal("failed to serve gRPC:", err)
+		}
+	}()
 
 	router := gin.Default()
-
 	router.POST("/payments", paymentHandler.CreatePayment)
 	router.GET("/payments/:order_id", paymentHandler.GetPayment)
 
-	log.Println("Payment Service running on :8081")
+	log.Println("Payment REST Service running on :8081")
 	if err := router.Run(":8081"); err != nil {
 		log.Fatal(err)
 	}
