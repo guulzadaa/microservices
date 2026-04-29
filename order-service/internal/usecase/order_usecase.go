@@ -73,3 +73,7 @@ func (uc *OrderUseCase) CancelOrder(id string) error {
 
 	return uc.repo.UpdateStatus(id, "Cancelled")
 }
+
+func (uc *OrderUseCase) GetPaymentStats() (*PaymentStats, error) {
+	return uc.paymentClient.GetPaymentStats()
+}

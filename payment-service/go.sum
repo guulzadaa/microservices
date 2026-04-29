@@ -40,8 +40,8 @@ github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/guulzadaa/AP2_generated v0.0.0-20260415194644-3efce69b49f2 h1:UMt+BCp4EoLXTA+KQzZWddyA/WRIfjQvuKcJxOOQDl4=
-github.com/guulzadaa/AP2_generated v0.0.0-20260415194644-3efce69b49f2/go.mod h1:0XjMj7ecsVUiidoOrvk4MMYwpJz8VzAVp78pYl+6MtI=
+github.com/guulzadaa/AP2_generated v0.0.0-20260419212234-e072309031fb h1:svW8MFWwZQ6XjCit0JC+6fnd43fZQJ4mC7823iHX4CQ=
+github.com/guulzadaa/AP2_generated v0.0.0-20260419212234-e072309031fb/go.mod h1:0XjMj7ecsVUiidoOrvk4MMYwpJz8VzAVp78pYl+6MtI=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=

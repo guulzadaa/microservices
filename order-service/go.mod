@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/guulzadaa/AP2_generated v0.0.0-20260415194644-3efce69b49f2
+	github.com/guulzadaa/AP2_generated v0.0.0-20260419212234-e072309031fb
 	github.com/lib/pq v1.12.1
 	google.golang.org/grpc v1.80.0
 )

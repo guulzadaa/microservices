@@ -28,7 +28,6 @@ func (s *PaymentServer) ProcessPayment(
 		req.OrderId,
 		req.Amount,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -36,5 +35,23 @@ func (s *PaymentServer) ProcessPayment(
 	return &paymentpb.PaymentResponse{
 		TransactionId: payment.TransactionID,
 		Status:        payment.Status,
+	}, nil
+}
+
+func (s *PaymentServer) GetPaymentStats(
+	ctx context.Context,
+	req *paymentpb.GetPaymentStatsRequest,
+) (*paymentpb.PaymentStats, error) {
+
+	stats, err := s.usecase.GetStats()
+	if err != nil {
+		return nil, err
+	}
+
+	return &paymentpb.PaymentStats{
+		TotalCount:      stats.TotalCount,
+		AuthorizedCount: stats.AuthorizedCount,
+		DeclinedCount:   stats.DeclinedCount,
+		TotalAmount:     stats.TotalAmount,
 	}, nil
 }
