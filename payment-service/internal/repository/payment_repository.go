@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"payment-service/internal/domain"
+	"payment-service/internal/usecase"
 )
 
 type PaymentRepository struct {
@@ -19,7 +20,8 @@ func (r *PaymentRepository) Create(payment *domain.Payment) error {
 		VALUES ($1, $2, $3, $4, $5)
 	`
 
-	_, err := r.db.Exec(query,
+	_, err := r.db.Exec(
+		query,
 		payment.ID,
 		payment.OrderID,
 		payment.TransactionID,
@@ -51,4 +53,29 @@ func (r *PaymentRepository) GetByOrderID(orderID string) (*domain.Payment, error
 	}
 
 	return &payment, nil
+}
+
+func (r *PaymentRepository) GetStats() (*usecase.PaymentStats, error) {
+	query := `
+		SELECT
+			COUNT(*) AS total_count,
+			COUNT(*) FILTER (WHERE status = 'Authorized') AS authorized_count,
+			COUNT(*) FILTER (WHERE status = 'Declined') AS declined_count,
+			COALESCE(SUM(amount), 0) AS total_amount
+		FROM payments
+	`
+
+	var stats usecase.PaymentStats
+
+	err := r.db.QueryRow(query).Scan(
+		&stats.TotalCount,
+		&stats.AuthorizedCount,
+		&stats.DeclinedCount,
+		&stats.TotalAmount,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &stats, nil
 }

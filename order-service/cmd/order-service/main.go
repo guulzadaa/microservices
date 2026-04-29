@@ -72,6 +72,7 @@ func main() {
 	router.POST("/orders", orderHandler.CreateOrder)
 	router.GET("/orders/:id", orderHandler.GetOrder)
 	router.PATCH("/orders/:id/cancel", orderHandler.CancelOrder)
+	router.GET("/payments/stats", orderHandler.GetPaymentStats)
 
 	log.Println("Order REST Service running on :8080")
 	if err := router.Run(":8080"); err != nil {

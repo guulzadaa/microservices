@@ -90,3 +90,18 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	c.JSON(nethttp.StatusOK, gin.H{"message": "order cancelled"})
 }
+
+func (h *OrderHandler) GetPaymentStats(c *gin.Context) {
+	stats, err := h.uc.GetPaymentStats()
+	if err != nil {
+		c.JSON(nethttp.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(nethttp.StatusOK, gin.H{
+		"total_count":      stats.TotalCount,
+		"authorized_count": stats.AuthorizedCount,
+		"declined_count":   stats.DeclinedCount,
+		"total_amount":     stats.TotalAmount,
+	})
+}

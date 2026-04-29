@@ -38,3 +38,7 @@ func (uc *PaymentUseCase) CreatePayment(orderID string, amount int64) (*domain.P
 func (uc *PaymentUseCase) GetByOrderID(orderID string) (*domain.Payment, error) {
 	return uc.repo.GetByOrderID(orderID)
 }
+
+func (uc *PaymentUseCase) GetStats() (*PaymentStats, error) {
+	return uc.repo.GetStats()
+}
