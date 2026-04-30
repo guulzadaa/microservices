@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net"
+	"os"
 
 	"payment-service/internal/repository"
 	grpcTransport "payment-service/internal/transport/grpc"
@@ -16,8 +17,15 @@ import (
 	"google.golang.org/grpc"
 )
 
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func initDB() *sql.DB {
-	connStr := "host=localhost port=5432 user=postgres password=123123 dbname=payment_db sslmode=disable"
+	connStr := getEnv("DATABASE_URL", "host=localhost port=5432 user=postgres password=123123 dbname=payment_db sslmode=disable")
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {

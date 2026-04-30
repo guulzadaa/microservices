@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	orderpb "github.com/guulzadaa/AP2_generated/orderpb"
@@ -17,8 +18,15 @@ import (
 	"order-service/internal/usecase"
 )
 
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func initDB() *sql.DB {
-	connStr := "host=localhost port=5432 user=postgres password=123123 dbname=order_db sslmode=disable"
+	connStr := getEnv("DATABASE_URL", "host=localhost port=5432 user=postgres password=123123 dbname=order_db sslmode=disable")
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -36,8 +44,10 @@ func main() {
 	db := initDB()
 	defer db.Close()
 
+	paymentGRPCAddr := getEnv("PAYMENT_GRPC_ADDR", "localhost:50051")
+
 	conn, err := grpc.Dial(
-		"localhost:50051",
+		paymentGRPCAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

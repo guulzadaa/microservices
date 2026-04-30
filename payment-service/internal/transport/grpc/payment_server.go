@@ -2,20 +2,37 @@ package grpc
 
 import (
 	"context"
+	"log"
+	"os"
+	"strings"
 
+	"payment-service/internal/messaging"
 	"payment-service/internal/usecase"
 
+	"github.com/google/uuid"
 	paymentpb "github.com/guulzadaa/AP2_generated/paymentpb"
 )
 
 type PaymentServer struct {
 	paymentpb.UnimplementedPaymentServiceServer
-	usecase *usecase.PaymentUseCase
+	usecase   *usecase.PaymentUseCase
+	publisher *messaging.Publisher
 }
 
 func NewPaymentServer(uc *usecase.PaymentUseCase) *PaymentServer {
+	rabbitURL := os.Getenv("RABBITMQ_URL")
+	if rabbitURL == "" {
+		rabbitURL = "amqp://admin:admin123@localhost:5672/"
+	}
+
+	publisher, err := messaging.NewPublisher(rabbitURL)
+	if err != nil {
+		log.Fatal("Failed to connect to RabbitMQ:", err)
+	}
+
 	return &PaymentServer{
-		usecase: uc,
+		usecase:   uc,
+		publisher: publisher,
 	}
 }
 
@@ -30,6 +47,21 @@ func (s *PaymentServer) ProcessPayment(
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if strings.EqualFold(payment.Status, "authorized") || strings.EqualFold(payment.Status, "completed") {
+		event := messaging.PaymentCompletedEvent{
+			EventID:       uuid.New().String(),
+			OrderID:       req.OrderId,
+			Amount:        float64(req.Amount),
+			CustomerEmail: "user@example.com",
+			Status:        payment.Status,
+		}
+
+		err := s.publisher.PublishPaymentCompleted(event)
+		if err != nil {
+			log.Println("Failed to publish payment event:", err)
+		}
 	}
 
 	return &paymentpb.PaymentResponse{

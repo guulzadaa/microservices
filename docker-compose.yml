@@ -1,0 +1,71 @@
+services:
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+
+  order-db:
+    image: postgres:16
+    container_name: order-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123123
+      POSTGRES_DB: order_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./order-service/migrations:/docker-entrypoint-initdb.d
+
+  payment-db:
+    image: postgres:16
+    container_name: payment-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123123
+      POSTGRES_DB: payment_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./payment-service/migrations:/docker-entrypoint-initdb.d
+
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    restart: on-failure
+    depends_on:
+      - payment-db
+      - rabbitmq
+    ports:
+      - "8081:8081"
+      - "50051:50051"
+    environment:
+      DATABASE_URL: "host=payment-db port=5432 user=postgres password=123123 dbname=payment_db sslmode=disable"
+      RABBITMQ_URL: "amqp://admin:admin123@rabbitmq:5672/"
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    restart: on-failure
+    depends_on:
+      - order-db
+      - payment-service
+    ports:
+      - "8080:8080"
+      - "50052:50052"
+    environment:
+      DATABASE_URL: "host=order-db port=5432 user=postgres password=123123 dbname=order_db sslmode=disable"
+      PAYMENT_GRPC_ADDR: "payment-service:50051"
+
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_URL: "amqp://admin:admin123@rabbitmq:5672/"
