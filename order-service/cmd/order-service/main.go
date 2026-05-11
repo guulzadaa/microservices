@@ -4,21 +4,25 @@ import (
 	"database/sql"
 	"log"
 	"net"
-
-	"github.com/gin-gonic/gin"
-	orderpb "github.com/guulzadaa/AP2_generated/orderpb"
-	_ "github.com/lib/pq"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
+	"order-service/internal/cache"
 	"order-service/internal/repository"
 	grpcTransport "order-service/internal/transport/grpc"
 	httpdelivery "order-service/internal/transport/http"
 	"order-service/internal/usecase"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/guulzadaa/AP2_generated/orderpb"
+	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func initDB() *sql.DB {
-	connStr := "host=localhost port=5432 user=postgres password=123123 dbname=order_db sslmode=disable"
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		connStr = "host=localhost port=5432 user=postgres password=123123 dbname=order_db sslmode=disable"
+	}
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -36,16 +40,24 @@ func main() {
 	db := initDB()
 	defer db.Close()
 
+	redisClient := cache.NewRedisClient()
+
+	paymentAddr := os.Getenv("PAYMENT_GRPC_ADDR")
+	if paymentAddr == "" {
+		paymentAddr = "localhost:50051"
+	}
+
 	conn, err := grpc.Dial(
-		"localhost:50051",
+		paymentAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
+
 	if err != nil {
 		log.Fatal("failed to connect to payment gRPC service:", err)
 	}
 	defer conn.Close()
 
-	orderRepo := repository.NewOrderRepository(db)
+	orderRepo := repository.NewOrderRepository(db, redisClient)
 	paymentClient := repository.NewPaymentGRPCClient(conn)
 	orderUC := usecase.NewOrderUseCase(orderRepo, paymentClient)
 
