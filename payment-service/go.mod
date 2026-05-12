@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/guulzadaa/AP2_generated v0.0.0-20260419212234-e072309031fb
 	github.com/lib/pq v1.12.1
+	github.com/rabbitmq/amqp091-go v1.11.0
 	google.golang.org/grpc v1.80.0
 )
 

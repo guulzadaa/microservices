@@ -2,16 +2,21 @@ package usecase
 
 import (
 	"payment-service/internal/domain"
+	"payment-service/internal/messaging"
 
 	"github.com/google/uuid"
 )
 
 type PaymentUseCase struct {
-	repo PaymentRepository
+	repo      PaymentRepository
+	publisher *messaging.Publisher
 }
 
-func NewPaymentUseCase(repo PaymentRepository) *PaymentUseCase {
-	return &PaymentUseCase{repo: repo}
+func NewPaymentUseCase(repo PaymentRepository, publisher *messaging.Publisher) *PaymentUseCase {
+	return &PaymentUseCase{
+		repo:      repo,
+		publisher: publisher,
+	}
 }
 
 func (uc *PaymentUseCase) CreatePayment(orderID string, amount int64) (*domain.Payment, error) {
@@ -30,6 +35,20 @@ func (uc *PaymentUseCase) CreatePayment(orderID string, amount int64) (*domain.P
 
 	if err := uc.repo.Create(payment); err != nil {
 		return nil, err
+	}
+
+	if status == "Authorized" && uc.publisher != nil {
+		event := messaging.PaymentCompletedEvent{
+			EventID:       uuid.New().String(),
+			OrderID:       orderID,
+			Amount:        float64(amount) / 100,
+			CustomerEmail: "user@example.com",
+			Status:        "completed",
+		}
+
+		if err := uc.publisher.PublishPaymentCompleted(event); err != nil {
+			return nil, err
+		}
 	}
 
 	return payment, nil

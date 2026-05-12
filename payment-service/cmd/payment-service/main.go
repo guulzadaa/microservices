@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 
+	"payment-service/internal/messaging"
 	"payment-service/internal/repository"
 	grpcTransport "payment-service/internal/transport/grpc"
 	httpdelivery "payment-service/internal/transport/http"
@@ -39,8 +40,20 @@ func main() {
 	db := initDB()
 	defer db.Close()
 
+	rabbitURL := os.Getenv("RABBITMQ_URL")
+	if rabbitURL == "" {
+		rabbitURL = "amqp://admin:admin123@localhost:5672/"
+	}
+
+	publisher, err := messaging.NewPublisher(rabbitURL)
+	if err != nil {
+		log.Fatal("failed to connect RabbitMQ publisher:", err)
+	}
+	defer publisher.Close()
+
 	paymentRepo := repository.NewPaymentRepository(db)
-	paymentUC := usecase.NewPaymentUseCase(paymentRepo)
+	paymentUC := usecase.NewPaymentUseCase(paymentRepo, publisher)
+
 	paymentHandler := httpdelivery.NewPaymentHandler(paymentUC)
 	paymentServer := grpcTransport.NewPaymentServer(paymentUC)
 

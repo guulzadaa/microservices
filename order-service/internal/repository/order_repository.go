@@ -86,7 +86,7 @@ func (r *OrderRepository) GetByID(id string) (*domain.Order, error) {
 	// 3. Save to Redis
 	orderJSON, err := json.Marshal(order)
 	if err == nil {
-		ttlStr := os.Getenv("CACHE_TTL_SECONDS")
+		ttlStr := os.Getenv("ORDER_CACHE_TTL_SECONDS")
 
 		ttlSeconds := 300
 

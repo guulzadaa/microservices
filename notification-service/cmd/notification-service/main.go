@@ -6,9 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
+	"strconv"
 	"syscall"
 	"time"
+
+	"notification-service/internal/idempotency"
+	"notification-service/internal/provider"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -20,11 +23,6 @@ type PaymentCompletedEvent struct {
 	CustomerEmail string  `json:"customer_email"`
 	Status        string  `json:"status"`
 }
-
-var (
-	processedEvents = make(map[string]bool)
-	mu              sync.Mutex
-)
 
 func main() {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
@@ -45,7 +43,7 @@ func main() {
 	defer ch.Close()
 
 	_, err = ch.QueueDeclare(
-		"payment.completed.dlq",
+		"payment.completed",
 		true,
 		false,
 		false,
@@ -53,26 +51,11 @@ func main() {
 		nil,
 	)
 	if err != nil {
-		log.Fatal("Failed to declare DLQ:", err)
-	}
-
-	queue, err := ch.QueueDeclare(
-		"payment.completed",
-		true,
-		false,
-		false,
-		false,
-		amqp.Table{
-			"x-dead-letter-exchange":    "",
-			"x-dead-letter-routing-key": "payment.completed.dlq",
-		},
-	)
-	if err != nil {
 		log.Fatal("Failed to declare queue:", err)
 	}
 
 	msgs, err := ch.Consume(
-		queue.Name,
+		"payment.completed",
 		"",
 		false,
 		false,
@@ -82,6 +65,19 @@ func main() {
 	)
 	if err != nil {
 		log.Fatal("Failed to register consumer:", err)
+	}
+
+	redisStore := idempotency.NewRedisStore()
+
+	var notificationProvider provider.NotificationProvider
+
+	providerMode := os.Getenv("PROVIDER_MODE")
+
+	switch providerMode {
+	case "SIMULATED":
+		notificationProvider = provider.NewSimulatedProvider()
+	default:
+		notificationProvider = provider.NewSimulatedProvider()
 	}
 
 	log.Println("Notification Service started. Waiting for messages...")
@@ -100,96 +96,90 @@ func main() {
 				continue
 			}
 
-			mu.Lock()
-			if processedEvents[event.EventID] {
-				mu.Unlock()
+			ctx := context.Background()
+
+			processed, err := redisStore.IsProcessed(ctx, event.EventID)
+			if err != nil {
+				log.Println("Redis idempotency check failed:", err)
+				msg.Nack(false, true)
+				continue
+			}
+
+			if processed {
 				log.Println("Duplicate event ignored:", event.EventID)
 				msg.Ack(false)
 				continue
 			}
-			mu.Unlock()
 
-			if event.OrderID == "00000000-0000-0000-0000-000000000000" {
-				retryCount := getRetryCount(msg)
+			notification := provider.Notification{
+				EventID:       event.EventID,
+				OrderID:       event.OrderID,
+				Amount:        event.Amount,
+				CustomerEmail: event.CustomerEmail,
+				Status:        event.Status,
+			}
 
-				if retryCount >= 3 {
-					log.Println("Message failed 3 times. Sending to DLQ:", event.EventID)
-					msg.Nack(false, false)
-					continue
+			maxRetries := getEnvAsInt("NOTIFICATION_MAX_RETRIES", 3)
+			baseBackoff := getEnvAsInt("NOTIFICATION_BACKOFF_SECONDS", 2)
+
+			success := false
+
+			for attempt := 0; attempt <= maxRetries; attempt++ {
+				err = notificationProvider.Send(ctx, notification)
+
+				if err == nil {
+					success = true
+					break
 				}
 
-				log.Printf("Simulated failure for event %s. Retry attempt: %d", event.EventID, retryCount+1)
+				log.Printf(
+					"Notification send failed. Attempt %d/%d. Error: %v",
+					attempt+1,
+					maxRetries+1,
+					err,
+				)
 
-				err := republishWithRetry(ch, msg, retryCount+1)
-				if err != nil {
-					log.Println("Failed to republish message:", err)
-					msg.Nack(false, false)
-					continue
-				}
+				backoff := time.Duration(baseBackoff*(1<<attempt)) * time.Second
 
-				msg.Ack(false)
+				log.Printf("Retrying in %v...", backoff)
+
+				time.Sleep(backoff)
+			}
+
+			if !success {
+				log.Println("Notification permanently failed:", event.EventID)
+
+				msg.Nack(false, false)
 				continue
 			}
 
-			log.Printf("[Notification] Sent email to %s for Order #%s. Amount: $%.2f",
-				event.CustomerEmail,
-				event.OrderID,
-				event.Amount,
-			)
-
-			mu.Lock()
-			processedEvents[event.EventID] = true
-			mu.Unlock()
+			err = redisStore.MarkProcessed(ctx, event.EventID)
+			if err != nil {
+				log.Println("Failed to save idempotency key:", err)
+				msg.Nack(false, true)
+				continue
+			}
 
 			msg.Ack(false)
 		}
 	}()
 
 	<-stop
+
 	log.Println("Notification Service shutting down...")
 }
 
-func getRetryCount(msg amqp.Delivery) int32 {
-	if msg.Headers == nil {
-		return 0
+func getEnvAsInt(key string, defaultValue int) int {
+	valueStr := os.Getenv(key)
+
+	if valueStr == "" {
+		return defaultValue
 	}
 
-	value, ok := msg.Headers["x-retry-count"]
-	if !ok {
-		return 0
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
 	}
 
-	switch v := value.(type) {
-	case int32:
-		return v
-	case int:
-		return int32(v)
-	default:
-		return 0
-	}
-}
-
-func republishWithRetry(ch *amqp.Channel, msg amqp.Delivery, retryCount int32) error {
-	headers := amqp.Table{}
-	for key, value := range msg.Headers {
-		headers[key] = value
-	}
-	headers["x-retry-count"] = retryCount
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	return ch.PublishWithContext(
-		ctx,
-		"",
-		"payment.completed",
-		false,
-		false,
-		amqp.Publishing{
-			ContentType:  msg.ContentType,
-			DeliveryMode: amqp.Persistent,
-			Body:         msg.Body,
-			Headers:      headers,
-		},
-	)
+	return value
 }

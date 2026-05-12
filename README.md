@@ -118,3 +118,30 @@ payment-service/
 ```
 
 
+# Assignment 3 - Event-Driven Architecture
+
+## Architecture
+Order Service → Payment Service → RabbitMQ → Notification Service
+
+## Features
+- Event-driven communication using RabbitMQ
+- Payment Service as Producer
+- Notification Service as Consumer
+- Manual ACK (at-least-once delivery)
+- Durable queues and persistent messages
+- Idempotency using event_id
+- Dead Letter Queue (DLQ) with retry mechanism
+
+## How to run
+```bash
+docker compose up --build
+```
+
+## Testing
+- POST /orders -> triggers payment and event
+- Notification Service logs email simulation
+- RabbitMQ UI: http://localhost:15672
+
+## Architecture diagram
+![Diagram](docs/DiagramAssignment3.png)
+
